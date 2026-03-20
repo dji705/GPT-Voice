@@ -3,6 +3,10 @@ const cors = require('cors');
 const { GoogleSpreadsheet } = require('google-spreadsheet');
 const { JWT } = require('google-auth-library');
 const fetch = require('node-fetch'); // חובה לוודא שזה מופיע ב-package.json
+const { inject } = require('@vercel/analytics');
+
+// Initialize Vercel Analytics
+inject();
 
 const app = express();
 app.use(cors());
