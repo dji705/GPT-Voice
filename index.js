@@ -9,9 +9,12 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Test route
-app.get('/', (req, res) => res.send("Server is up and running!"));
+// Status Check
+app.get('/', (req, res) => {
+    res.send("Server Status: Online");
+});
 
+// Google Authentication Helper
 async function getDoc() {
     const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT);
     const auth = new JWT({
@@ -24,22 +27,28 @@ async function getDoc() {
     return doc;
 }
 
-// Route 1: Ask AI
+// Route 1: ymotAskAI
 app.all('/api/ymotAskAI', async (req, res) => {
-    const phone = req.query.ApiPhone || "לא ידוע";
+    const phone = req.query.ApiPhone || "unknown";
     const question = req.query.question_text;
 
-    if (!question) return res.send("id_list_message=t-לא זוהתה שאלה");
+    if (!question) {
+        return res.send("id_list_message=t-no_question_detected");
+    }
 
     try {
         const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${process.env.GEMINI_API_KEY}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: question }] }] })
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: question }] }]
+            })
         });
         
         const data = await aiResponse.json();
         const aiAnswer = data.candidates[0].content.parts[0].text;
+        
+        // Final cleaning for Yemot Hamashiah
         const cleanAnswer = aiAnswer.replace(/[^\u0590-\u05FF0-9 ,.?!"']/g, '');
 
         const doc = await getDoc();
@@ -51,14 +60,14 @@ app.all('/api/ymotAskAI', async (req, res) => {
             "טקסט מסונן": cleanAnswer
         });
 
-        res.send("id_list_message=t-שאלתך התקבלה, המתן למענה");
+        res.send("id_list_message=t-שאלתך התקבלה, אנא המתן למענה");
     } catch (error) {
-        console.error(error);
+        console.error("Error:", error);
         res.send("id_list_message=t-חלה שגיאה בעיבוד השאלה");
     }
 });
 
-// Route 2: Read Answer
+// Route 2: ymotReadAI
 app.all('/api/ymotReadAI', async (req, res) => {
     try {
         const phone = req.query.ApiPhone;
@@ -74,10 +83,12 @@ app.all('/api/ymotReadAI', async (req, res) => {
             res.send("id_list_message=t-טרם התקבל מענה, נסה שוב בעוד רגע");
         }
     } catch (error) {
+        console.error("Error:", error);
         res.send("id_list_message=t-שגיאה בקריאת הנתונים");
     }
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
 module.exports = app;
