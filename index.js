@@ -6,11 +6,22 @@ const fetch = require('node-fetch');
 const app = express();
 app.use(express.json());
 
+// --- נתיב בדיקה: כדי לראות שהשרת עובד ולא נותן 404 ---
+app.get('/', (req, res) => {
+  res.send("השרת באוויר ועובד! כעת ניתן לפנות לכתובות ה-API.");
+});
+
 // הגדרות חיבור לגוגל
-const serviceAccount = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT);
+let serviceAccount;
+try {
+  serviceAccount = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT);
+} catch (e) {
+  console.error("שגיאה בפענוח ה-JSON של גוגל. וודא שהדבקת אותו נכון ב-Vercel.");
+}
+
 const auth = new JWT({
-  email: serviceAccount.client_email,
-  key: serviceAccount.private_key,
+  email: serviceAccount?.client_email,
+  key: serviceAccount?.private_key,
   scopes: ['https://www.googleapis.com/auth/spreadsheets'],
 });
 
@@ -39,7 +50,13 @@ app.get('/api/ymotAskAI', async (req, res) => {
     });
 
     const data = await response.json();
+    
+    if (!data.candidates || !data.candidates[0]) {
+        throw new Error("No response from AI");
+    }
+
     const aiAnswer = data.candidates[0].content.parts[0].text;
+    // ניקוי תווים מיוחדים שיכולים לשבש את ימות המשיח
     const cleanAnswer = aiAnswer.replace(/[^\u0590-\u05FF0-9 ,.?!"']/g, '');
 
     // רישום בגיליון
@@ -53,11 +70,11 @@ app.get('/api/ymotAskAI', async (req, res) => {
     res.send("id_list_message=t-שאלתך התקבלה, אנא המתן למענה");
   } catch (error) {
     console.error(error);
-    res.send("id_list_message=t-חלה שגיאה בעיבוד");
+    res.send("id_list_message=t-חלה שגיאה בעיבוד השאלה");
   }
 });
 
-// --- חלק 2: קריאת התשובה מהגיליון (זה מה שביקשת) ---
+// --- חלק 2: קריאת התשובה מהגיליון ---
 app.get('/api/ymotReadAI', async (req, res) => {
   const phone = req.query.ApiPhone;
 
@@ -67,7 +84,7 @@ app.get('/api/ymotReadAI', async (req, res) => {
     const rows = await sheet.getRows();
 
     // מחפש את השורה האחרונה של המשתמש לפי מספר טלפון
-    const userRow = rows.reverse().find(row => row.get("מספר שורה") === phone);
+    const userRow = [...rows].reverse().find(row => row.get("מספר שורה") === phone);
 
     if (userRow && userRow.get("טקסט מסונן")) {
       const answer = userRow.get("טקסט מסונן");
@@ -77,7 +94,7 @@ app.get('/api/ymotReadAI', async (req, res) => {
     }
   } catch (error) {
     console.error(error);
-    res.send("id_list_message=t-שגיאה בקריאת הנתונים");
+    res.send("id_list_message=t-שגיאה בקריאת הנתונים מהגיליון");
   }
 });
 
