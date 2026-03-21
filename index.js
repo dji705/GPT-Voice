@@ -9,10 +9,9 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// נתיב בדיקה לראות שהשרת עובד
-app.get('/', (req, res) => res.send("השרת באוויר!"));
+// Test route
+app.get('/', (req, res) => res.send("Server is up and running!"));
 
-// פונקציית עזר לחיבור לגוגל
 async function getDoc() {
     const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT);
     const auth = new JWT({
@@ -25,7 +24,7 @@ async function getDoc() {
     return doc;
 }
 
-// שלוחה 1: קבלת שאלה, שליחה ל-AI וכתיבה לגיליון
+// Route 1: Ask AI
 app.all('/api/ymotAskAI', async (req, res) => {
     const phone = req.query.ApiPhone || "לא ידוע";
     const question = req.query.question_text;
@@ -33,17 +32,16 @@ app.all('/api/ymotAskAI', async (req, res) => {
     if (!question) return res.send("id_list_message=t-לא זוהתה שאלה");
 
     try {
-        // 1. פנייה ל-AI (Gemini)
         const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${process.env.GEMINI_API_KEY}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ contents: [{ parts: [{ text: question }] }] })
         });
+        
         const data = await aiResponse.json();
         const aiAnswer = data.candidates[0].content.parts[0].text;
-        const cleanAnswer = aiAnswer.replace(/[^\u0590-\u05FF0-9 ,.?!"']/g, ''); // ניקוי לעברית בלבד
+        const cleanAnswer = aiAnswer.replace(/[^\u0590-\u05FF0-9 ,.?!"']/g, '');
 
-        // 2. כתיבה לגיליון
         const doc = await getDoc();
         const sheet = doc.sheetsByTitle["מענה AI"];
         await sheet.addRow({
@@ -60,7 +58,7 @@ app.all('/api/ymotAskAI', async (req, res) => {
     }
 });
 
-// שלוחה 2: קריאת התשובה מהגיליון
+// Route 2: Read Answer
 app.all('/api/ymotReadAI', async (req, res) => {
     try {
         const phone = req.query.ApiPhone;
@@ -68,7 +66,6 @@ app.all('/api/ymotReadAI', async (req, res) => {
         const sheet = doc.sheetsByTitle["מענה AI"];
         const rows = await sheet.getRows();
 
-        // מחפש את השורה האחרונה של המשתמש
         const userRow = [...rows].reverse().find(row => row.get("מספר שורה") === String(phone));
 
         if (userRow && userRow.get("טקסט מסונן")) {
