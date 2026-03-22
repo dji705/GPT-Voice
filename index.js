@@ -17,22 +17,22 @@ app.get('/', (req, res) => {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>ממשק AI - שליחת שאלה</title>
+        <title>מערכת AI - שליחת שאלה</title>
         <style>
-            body { font-family: sans-serif; background: #f4f7f6; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-            .card { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center; }
-            h2 { color: #333; }
-            input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
-            button { width: 100%; padding: 12px; background: #27ae60; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold; }
-            button:hover { background: #219150; }
-            #status { margin-top: 15px; font-weight: bold; color: #555; font-size: 14px; line-height: 1.4; }
+            body { font-family: sans-serif; background: #f0f4f8; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+            .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 8px 20px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center; }
+            h2 { color: #2c3e50; margin-bottom: 20px; }
+            input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #cbd5e0; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
+            button { width: 100%; padding: 12px; background: #3182ce; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold; transition: background 0.2s; }
+            button:hover { background: #2b6cb0; }
+            #status { margin-top: 20px; font-weight: bold; color: #4a5568; font-size: 14px; min-height: 40px; }
         </style>
     </head>
     <body>
         <div class="card">
-            <h2>שליחת שאלה למערכת</h2>
+            <h2>שאל את ה-AI</h2>
             <input type="text" id="phone" placeholder="מספר טלפון">
-            <input type="text" id="question" placeholder="הקלד את שאלתך כאן">
+            <input type="text" id="question" placeholder="הקלד את שאלתך...">
             <button onclick="sendQuestion()">שלח שאלה</button>
             <div id="status">סטטוס: מחובר ✅</div>
         </div>
@@ -78,8 +78,8 @@ app.all('/api/ymotAskAI', async (req, res) => {
     if (!question) return res.send("id_list_message=t-נא_להקיש_שאלה");
 
     try {
-        console.log("Starting Gemini API Call...");
-        const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+        // שימוש בכתובת v1 היציבה
+        const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ contents: [{ parts: [{ text: question }] }] })
@@ -87,14 +87,17 @@ app.all('/api/ymotAskAI', async (req, res) => {
         
         const data = await aiResponse.json();
 
-        // בדיקה אם Gemini החזיר תשובה תקינה
+        if (data.error) {
+            console.error("Gemini API Error:", data.error.message);
+            return res.send("id_list_message=t-error_api_connection");
+        }
+
         if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
-            console.error("Gemini Error:", data);
-            return res.send("id_list_message=t-error_from_ai_provider");
+            return res.send("id_list_message=t-error_no_content");
         }
 
         const aiAnswer = data.candidates[0].content.parts[0].text;
-        // ניקוי תווים מיוחדים עבור ימות המשיח
+        // ניקוי טקסט עבור ימות המשיח
         const cleanAnswer = aiAnswer.replace(/[^\u0590-\u05FF0-9 ,.?!"']/g, '');
 
         // הוספה לגוגל שיטס
@@ -112,11 +115,12 @@ app.all('/api/ymotAskAI', async (req, res) => {
         res.set('Content-Type', 'text/plain');
         res.send("id_list_message=t-שאלתך התקבלה, אנא המתן למענה");
     } catch (error) {
-        console.error("General Error:", error.message);
-        res.send("id_list_message=t-error_system_failure");
+        console.error("Critical System Error:", error.message);
+        res.send("id_list_message=t-error_general_failure");
     }
 });
 
+// --- API לקריאת התשובה ---
 app.all('/api/ymotReadAI', async (req, res) => {
     try {
         const phone = req.query.ApiPhone;
@@ -124,7 +128,6 @@ app.all('/api/ymotReadAI', async (req, res) => {
         const sheet = doc.sheetsByTitle["מענה AI"];
         const rows = await sheet.getRows();
 
-        // מציאת השורה האחרונה של המשתמש לפי מספר טלפון
         const userRow = [...rows].reverse().find(row => row.get("מספר שורה") === String(phone));
 
         res.set('Content-Type', 'text/plain');
